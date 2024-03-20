@@ -1,0 +1,37 @@
+{
+    "manifest_version": 2,
+    "name": "CPC Jenkins Tweaks",
+    "version": "1.0.2",
+    "description": "Adding various quality of life UI/UX tweaks to Jenkins for the CPC Team. Injects various buttons, links, and shortcuts to make navigating Jenkins easier.",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "{451695fd-3af8-459c-a45d-fabd6969f2f1}"
+        }
+    },
+    "permissions": [
+        "activeTab"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://stable-cloud-images-ps5.jenkins.canonical.com/*",
+                "http://localhost:8080/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_end" 
+        }
+    ],
+    "icons": {
+        "48": "jenkins.png"
+    },
+    "browser_action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "jenkins.png",
+            "48": "jenkins.png",
+            "128": "jenkins.png"
+        }
+    }
+}

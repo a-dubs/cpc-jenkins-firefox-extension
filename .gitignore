@@ -1,0 +1,5 @@
+/.env
+/.vscode
+/.web-extension-id
+/jenkins-browser-plugin-backend.py
+/settings.json
