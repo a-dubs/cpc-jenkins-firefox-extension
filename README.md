@@ -1,5 +1,8 @@
 # CPC Jenkins Tweaks - Firefox Extension
 
+![current release: v1.0.3](https://img.shields.io/badge/current_release-v1.0.3-green)
+
+
 Works with both local jenkins and stable-cloud-images jenkins.
 
 Features:
