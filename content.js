@@ -1,5 +1,4 @@
 // content.js
-console.log("content.js run")
 var lastJobNo = undefined;
 
 
@@ -15,38 +14,54 @@ function cleanupExisting() {
     if (buttonDiv) {
         buttonDiv.remove()
     }
-
-    
+    const customBranding = document.querySelector('.custom-branding')
+    if (customBranding) {
+        customBranding.remove()
+    }
 }
 
+function modifyBanner() {
+    const target_div = document.querySelector("#page-header .logo");
+    const custom_branding = document.createElement("div");
+    custom_branding.classList.add("custom-branding");
+    const custom_branding_text = document.createElement("h1");
+    custom_branding_text.textContent = "CPC Jenkins Tweaks Active";
+    custom_branding_text.style.color = "#aaa";
+    custom_branding_text.style.fontSize = "15px";
+    custom_branding_text.style.fontWeight = "normal";
+    custom_branding_text.style.margin = "0";
+    custom_branding.style.width = "50%";
+    custom_branding.style.marginLeft = "20px";
+    custom_branding_text.style.top = "50%";
+    custom_branding_text.style.transform = "translateY(-50%)";
+    custom_branding_text.style.position = "absolute";
+    custom_branding.style.position = "relative";
+    custom_branding.appendChild(custom_branding_text);
+    target_div.appendChild(custom_branding);
+}
 
 // this should only be run once upon document load
 function main() {
-    cleanupExisting()
-    createReleaseFilters()
-    injectButtons();
+    
 
     // Check if the current site's base URL is localhost:8080
     if (
-        window.location.href.startsWith('localhost:8080') || 
+        window.location.href.includes('localhost:8080') || 
         window.location.href.includes('jenkins.canonical.com') 
     ) {
-
-        // query bad url and good url and log the status of code of each
-        
+        console.log("--- CPC Jenkins Tweaks Extension ---")
+        cleanupExisting()
+        createReleaseFilters()
+        doAlternateReleaseStuff()
+        modifyBanner()
         // Find the #main-panel div
         const mainPanel = document.querySelector('#main-panel');
         if (mainPanel) {
             console.log('injecting buttons!');
             injectButtons();
-        } else {
-            console.log('#main-panel div not found.');
-        }
-
-        doAlternateReleaseStuff()
-
+        } 
     } else {
-        console.log('Extension is not active on this page.');
+        // console.log('Extension is not active on this page.');
     }
 }
 
@@ -129,6 +144,8 @@ async function getUrlsWith200Status(urls) {
     for (const url of urls) {
         try {
             const response = await fetch(url);
+            // const content = await response.text();
+            // console.log("content:", content)
             if (response.status === 200) {
                 validUrls.push(url);
             }
@@ -517,40 +534,40 @@ main()
 // }
 
 
-// Function to check for changes in the element
-function checkForChanges() {
-    // Find the element you want to monitor for changes
-    const buildHistory = document.querySelector('#buildHistory');
-    if (!buildHistory) {
-        return;
-    }
-    const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell')
+// // Function to check for changes in the element
+// function checkForChanges() {
+//     // Find the element you want to monitor for changes
+//     const buildHistory = document.querySelector('#buildHistory');
+//     if (!buildHistory) {
+//         return;
+//     }
+//     const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell')
 
 
-    if (mostRecentJobEntry) {
-        const status = mostRecentJobEntry.querySelector(".build-status-link").getAttribute('tooltip').split(" > ")[0]
-        // Get the current content of the element
-        const currentContent = status;
-        console.log("status: " + status)
-        if (checkForChanges.lastContent === undefined) {
-            checkForChanges.lastContent = currentContent;
-            return;
-        }
-        // Check if the content has changed since the last check
-        else if (currentContent !== checkForChanges.lastContent && (status === "Success" || status === "Failed")) {
-            // Content has changed, trigger a push notification
-            if (status === "Success") {
-                sendNotification("Build Succeeded", "Job " + document.title.split(" [")[0] + " has completed successfully.");
-            }
-            else if (status === "Failed") {
-                sendNotification("Build Failed", "Job " + document.title.split(" [")[0] + " has failed.");
-            }
+//     if (mostRecentJobEntry) {
+//         const status = mostRecentJobEntry.querySelector(".build-status-link").getAttribute('tooltip').split(" > ")[0]
+//         // Get the current content of the element
+//         const currentContent = status;
+//         console.log("status: " + status)
+//         if (checkForChanges.lastContent === undefined) {
+//             checkForChanges.lastContent = currentContent;
+//             return;
+//         }
+//         // Check if the content has changed since the last check
+//         else if (currentContent !== checkForChanges.lastContent && (status === "Success" || status === "Failed")) {
+//             // Content has changed, trigger a push notification
+//             if (status === "Success") {
+//                 sendNotification("Build Succeeded", "Job " + document.title.split(" [")[0] + " has completed successfully.");
+//             }
+//             else if (status === "Failed") {
+//                 sendNotification("Build Failed", "Job " + document.title.split(" [")[0] + " has failed.");
+//             }
 
-            // Update the lastContent with the current content
-            checkForChanges.lastContent = currentContent;
-        }
-    }
-}
+//             // Update the lastContent with the current content
+//             checkForChanges.lastContent = currentContent;
+//         }
+//     }
+// }
 
 
 // listen for when the site makes a request to
@@ -563,17 +580,18 @@ function checkForChanges() {
 
 // });
 
+// checkForChanges.lastContent = undefined; // Set the initial content - assume it's "Success" so that the first check will only trigger if the content changes from "Success" to "Running" or "Failed"
+// // Initial check for changes
+// checkForChanges();
 
 
-checkForChanges.lastContent = undefined; // Set the initial content - assume it's "Success" so that the first check will only trigger if the content changes from "Success" to "Running" or "Failed"
-// Initial check for changes
-checkForChanges();
+// // Interval to check for changes in the element
+// const intervalId = setInterval(() => {
+//     checkForChanges(); // Check for changes periodically
+// }, 5000); // Adjust the interval as needed (e.g., every 5 seconds)
 
 
-// Interval to check for changes in the element
-const intervalId = setInterval(() => {
-    checkForChanges(); // Check for changes periodically
-}, 5000); // Adjust the interval as needed (e.g., every 5 seconds)
+
 
 // REPLACING MATRIX DIV INPLACE WITH LINKS STRAIGHT TO CONSOLE //
 // const mainpanel = document.querySelector('#main-panel');
