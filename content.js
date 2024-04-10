@@ -60,6 +60,10 @@ function getAllJobsFromLocalStorage() {
         else {
             console.log("Cached list of all jenkins jobs is less than 24 hours old.")
             all_job_names = all_jobs_json.jobs;
+            if (!all_job_names.includes(getJobNameFromUrl(window.location.href))) {
+                console.log("Current job not found in cached list of all jenkins jobs. Fetching now.")
+                fetchAllJenkinsJobs();
+            }
             console.log("All jenkins jobs found:", all_job_names);
         }
     }
