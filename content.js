@@ -69,11 +69,30 @@ function getAllJobsFromLocalStorage() {
     }
 }
 
+
+function getBaseUrl() {
+    /*
+    Get the base URL of the current page. (Without trailing slash)
+
+    Returns:
+    - string: The base URL of the current page.
+    */
+    const url = window.location.href;
+    if (url.includes('localhost:8080')) {
+        return 'http://localhost:8080';
+    }
+    if (url.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
+        return 'https://stable-cloud-images-ps5.jenkins.canonical.com';
+    }
+}
+
+
 function fetchAllJenkinsJobs() {
     // fetch https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/
     // parse as a document and then query all "#main-panel ol li a" elements
     // and then save the text of each element to a list
-    url = "https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/"
+    const url = getBaseUrl() + "/view/all/";
+    console.log("Fetching all jenkins jobs from:", url);
     query_string = ".jenkins-table__link.model-link.inside"
     fetch(url)
         .then(response => response.text())
