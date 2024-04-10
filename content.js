@@ -1,8 +1,104 @@
 // content.js
 var lastJobNo = undefined;
+var all_job_names = [];
 
 
-// Start observing changes in the mainPanel
+// this should only be run once upon document load
+function main() {
+    // Check if the current site's base URL is localhost:8080
+    if (
+        window.location.href.includes('localhost:8080') || 
+        window.location.href.includes('jenkins.canonical.com') 
+    ) {
+        console.log("--- CPC Jenkins Tweaks Extension ---")
+        cleanupExisting();
+        modifyBanner();
+        getAllJobsFromLocalStorage();
+        createReleaseFilters();
+        doAlternateReleaseStuff();
+        // Find the #main-panel div
+        const mainPanel = document.querySelector('#main-panel');
+        if (mainPanel) {
+            console.log('injecting buttons!');
+            injectButtons();
+        } 
+    } else {
+        // console.log('Extension is not active on this page.');
+    }
+}
+
+function getAllJobsFromLocalStorage() {
+    // first check if localStorage has the list of all jenkins jobs
+    // if not, fetch the list of all jenkins jobs and store in localStorage
+    var all_jobs_cache;
+    if (window.location.href.includes('localhost:8080')) {
+        all_jobs_cache = localStorage.getItem('localhost_all_jenkins_jobs');
+    }
+    else if (window.location.href.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
+        all_jobs_cache = localStorage.getItem('scij_all_jenkins_jobs');
+    }
+    else {
+        console.log("Not on a jenkins page. Not fetching all jenkins jobs.");
+        return;
+    }
+    if (!all_jobs_cache) {
+        console.log("No cached list of all jenkins jobs found. Fetching now.")
+        fetchAllJenkinsJobs();
+    }
+    else {
+        console.log("Cached list of all jenkins jobs found.")
+        all_jobs_json = JSON.parse(all_jobs_cache);
+        // check if the cache is older than 1 day
+        const cache_date = new Date(all_jobs_json.date_fetched);
+        const now = new Date();
+        const diff = now - cache_date;
+        const diff_in_hours = diff / (1000 * 60 * 60);
+        if (diff_in_hours > 24) {
+            console.log("Cached list of all jenkins jobs is older than 24 hours. Fetching now.")
+            fetchAllJenkinsJobs();
+        }
+        else {
+            console.log("Cached list of all jenkins jobs is less than 24 hours old.")
+            all_job_names = all_jobs_json.jobs;
+            console.log("All jenkins jobs found:", all_job_names);
+        }
+    }
+}
+
+function fetchAllJenkinsJobs() {
+    // fetch https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/
+    // parse as a document and then query all "#main-panel ol li a" elements
+    // and then save the text of each element to a list
+    url = "https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/"
+    query_string = ".jenkins-table__link.model-link.inside"
+    fetch(url)
+        .then(response => response.text())
+        .then(text => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
+            const elements = doc.querySelectorAll(query_string);
+            all_job_names = [];
+            elements.forEach((element) => {
+                all_job_names.push(element.innerText);
+            });
+            const job_storage_dict = {
+                "jobs": all_job_names,
+                "date_fetched": new Date().toISOString(),
+            }
+            console.log(all_job_names);
+            // then store these values in firefox local storage so that we can use them later
+            if (window.location.href.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
+                localStorage.setItem('scij_all_jenkins_jobs', JSON.stringify(job_storage_dict));
+                console.log("Stored all jenkins jobs in localStorage @ scij_all_jenkins_jobs.")
+            }
+            if (window.location.href.includes('localhost:8080')) {
+                localStorage.setItem('localhost_all_jenkins_jobs', JSON.stringify(job_storage_dict));
+                console.log("Stored all jenkins jobs in localStorage @ localhost_all_jenkins_jobs.")
+            }
+            doAlternateReleaseStuff();
+        })
+        .catch(error => console.error('Error:', error));
+}
 
 
 function cleanupExisting() {
@@ -40,32 +136,12 @@ function modifyBanner() {
     target_div.appendChild(custom_branding);
 }
 
-// this should only be run once upon document load
-function main() {
-    
-
-    // Check if the current site's base URL is localhost:8080
-    if (
-        window.location.href.includes('localhost:8080') || 
-        window.location.href.includes('jenkins.canonical.com') 
-    ) {
-        console.log("--- CPC Jenkins Tweaks Extension ---")
-        cleanupExisting()
-        createReleaseFilters()
-        doAlternateReleaseStuff()
-        modifyBanner()
-        // Find the #main-panel div
-        const mainPanel = document.querySelector('#main-panel');
-        if (mainPanel) {
-            console.log('injecting buttons!');
-            injectButtons();
-        } 
-    } else {
-        // console.log('Extension is not active on this page.');
-    }
-}
-
 function addAlternateReleaseShortcuts(urls) {
+    // delete existing buttons if they exist
+    const existingButtons = document.querySelectorAll('.alternate-release-button')
+    existingButtons.forEach((button) => {
+        button.remove()
+    })
     const buttonDiv = document.createElement('div')
     buttonDiv.id = "alternate-release-buttons"
     // buttonDiv.style.padding = "20px 10px 20px 10px"
@@ -76,6 +152,7 @@ function addAlternateReleaseShortcuts(urls) {
     buttonDiv.style.flexBasis = "100%"
     urls.forEach((url) => {
         const button = document.createElement('a')
+        button.classList.add('alternate-release-button')
         button.textContent = getReleaseFromUrl(url)
         // add <a href=url> to each button
         button.href = url
@@ -87,7 +164,11 @@ function addAlternateReleaseShortcuts(urls) {
         button.style.margin = "0 5px"
         // add soft shadow to button
         button.style.boxShadow = "0px 2px 2px 0px rgba(0,0,0,0.2)"
-
+        // if the url is the current url, disable the button and grey it out
+        if (url === window.location.href) {
+            button.style.pointerEvents = "none"
+            button.style.color = "#aaa"
+        }
         buttonDiv.appendChild(button)
     });    
     const breadcrumbBar = document.querySelector('#breadcrumbBar')
@@ -101,40 +182,72 @@ function getReleaseFromUrl(url) {
     if (!url.includes("/job/")) {
         return
     }
-    //https://stable-cloud-images-ps5.jenkins.canonical.com/view/Oracle/job/18.04-Base-Oracle-Build-Images/
     const release = url.split("/job/")[1].split("-")[0]
     return release
 }
 
-async function doAlternateReleaseStuff() {
-    // use regex to check if document title starts with release number like "22.04"
-    const release = getReleaseFromUrl(window.location.href)
-    if (release) {
-        console.log("job page found. doing alternate release stuff now.")
-        const valid_urls = await getValidAlternativeReleaseUrls(window.location.href, release)
-        console.log("valid_urls:", valid_urls)
-        addAlternateReleaseShortcuts(valid_urls)
+function createUrlFromRelease(current_url, new_release) {
+    // replace the release number in the url with the new release number
+    const current_release = getReleaseFromUrl(current_url)
+    const new_url = current_url.replace(current_release, new_release)
+    return new_url
+}
+
+function getJobNameFromUrl(url) {
+    // check if "/job/" is in url
+    if (!url.includes("/job/")) {
+        return
+    }
+    const job_name = url.split("/job/")[1].split("/")[0];
+    return job_name;
+}
+
+function doAlternateReleaseStuff() {
+    if (all_job_names.length > 0) {
+        console.log("doing alternate release stuff now.")
+        // use regex to check if document title starts with release number like "22.04"
+        const release = getReleaseFromUrl(window.location.href)
+        if (release) {
+            console.log("job page found. doing alternate release stuff now.")
+            const valid_urls = getValidAlternativeReleaseUrls(window.location.href, release)
+            console.log("valid_urls:", valid_urls)
+            addAlternateReleaseShortcuts(valid_urls)
+        }
     }
 }
 
-async function getValidAlternativeReleaseUrls(original_url, original_release) {
+function jobExists(job_name) {
+    console.log("checking if job exists:", job_name)
+    return all_job_names.includes(job_name)
+}
+
+function getValidAlternativeReleaseUrls(original_url, original_release) {
     const possible_releases = ["16.04", "18.04", "20.04", "22.04", "23.10", "24.04"]
-    // remove original release from possible_releases
-    possible_releases.splice(possible_releases.indexOf(original_release), 1)
-    console.log(original_url, original_release)
-    const possible_urls = []
+    var valid_urls = [];
+    const job_name = getJobNameFromUrl(original_url);
     possible_releases.forEach((release) => {
-        possible_urls.push(original_url.replace(original_release, release))
-    })
-    // let valid_urls = []
-    try {
-        const valid_urls = await getUrlsWith200Status(possible_urls);
-        // console.log('URLs with 200 status code:', valid_urls);
-        return valid_urls;
-    } catch (error) {
-        console.error('Error:', error);
-        return [];
-    }
+        if (jobExists(job_name.replace(original_release, release))) {
+            valid_urls.push(createUrlFromRelease(original_url, release))
+        }
+    });
+    return valid_urls
+    
+    // // remove original release from possible_releases
+    // possible_releases.splice(possible_releases.indexOf(original_release), 1)
+    // console.log(original_url, original_release)
+    // const possible_urls = []
+    // possible_releases.forEach((release) => {
+    //     possible_urls.push(original_url.replace(original_release, release))
+    // })
+    // // let valid_urls = []
+    // try {
+    //     const valid_urls = await getUrlsWith200Status(possible_urls);
+    //     // console.log('URLs with 200 status code:', valid_urls);
+    //     return valid_urls;
+    // } catch (error) {
+    //     console.error('Error:', error);
+    //     return [];
+    // }
     
 }
 
@@ -511,263 +624,3 @@ main()
 
 
 
-// // check if we are one job page
-// if (document.title.endsWith("[Jenkins]") && document.querySelector('#buildHistory')) {
-//     fetch('http://localhost:3039/start-ssh-tunnel', {
-//         method: 'POST',
-//     })
-//         .then(response => response.text())
-//         .then(data => console.log(data))
-//         .catch(error => console.error('Error:', error));
-
-
-
-//     // Interval to check for changes in mostRecentJobNo and update buttons
-//     const intervalId = setInterval(() => {
-//         injectButtons(); // Check and inject buttons periodically
-//     }, 5000); // Adjust the interval as needed (e.g., every 5 seconds)
-
-//     // Stop the interval when the page is unloaded (optional)
-//     window.addEventListener('unload', () => {
-//         clearInterval(intervalId);
-//     });
-// }
-
-
-// // Function to check for changes in the element
-// function checkForChanges() {
-//     // Find the element you want to monitor for changes
-//     const buildHistory = document.querySelector('#buildHistory');
-//     if (!buildHistory) {
-//         return;
-//     }
-//     const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell')
-
-
-//     if (mostRecentJobEntry) {
-//         const status = mostRecentJobEntry.querySelector(".build-status-link").getAttribute('tooltip').split(" > ")[0]
-//         // Get the current content of the element
-//         const currentContent = status;
-//         console.log("status: " + status)
-//         if (checkForChanges.lastContent === undefined) {
-//             checkForChanges.lastContent = currentContent;
-//             return;
-//         }
-//         // Check if the content has changed since the last check
-//         else if (currentContent !== checkForChanges.lastContent && (status === "Success" || status === "Failed")) {
-//             // Content has changed, trigger a push notification
-//             if (status === "Success") {
-//                 sendNotification("Build Succeeded", "Job " + document.title.split(" [")[0] + " has completed successfully.");
-//             }
-//             else if (status === "Failed") {
-//                 sendNotification("Build Failed", "Job " + document.title.split(" [")[0] + " has failed.");
-//             }
-
-//             // Update the lastContent with the current content
-//             checkForChanges.lastContent = currentContent;
-//         }
-//     }
-// }
-
-
-// listen for when the site makes a request to
-// https://stable-cloud-images-ps5.jenkins.canonical.com/job/24.04-Base-Oracle-Daily-Test/ajaxMatrix
-// and log to console
-// const observer = new MutationObserver((mutations) => {
-//     mutations.forEach((mutation) => {
-//         console.log(mutation);
-//     });
-
-// });
-
-// checkForChanges.lastContent = undefined; // Set the initial content - assume it's "Success" so that the first check will only trigger if the content changes from "Success" to "Running" or "Failed"
-// // Initial check for changes
-// checkForChanges();
-
-
-// // Interval to check for changes in the element
-// const intervalId = setInterval(() => {
-//     checkForChanges(); // Check for changes periodically
-// }, 5000); // Adjust the interval as needed (e.g., every 5 seconds)
-
-
-
-
-// REPLACING MATRIX DIV INPLACE WITH LINKS STRAIGHT TO CONSOLE //
-// const mainpanel = document.querySelector('#main-panel');
-// if (mainpanel) {
-//     const observer = new MutationObserver((mutations) => {
-//         // check all elements that have changed and check if any are the #matrix element
-//         mutations.forEach((mutation) => {
-//             console.log(mutation);  
-//             mutations.forEach((mutation) => {
-//                 mutation.addedNodes.forEach((node) => {
-//                     if (node.id === "matrix") {
-//                         console.log("matrix element added!")
-//                         // create duplicate of matrix table and inject it in a div after the matrix div
-//                         const customMatrix = node.cloneNode(true);
-//                         // change id of customMatrix to "custom-matrix"
-//                         customMatrix.id = "custom-matrix";
-//                         // append all hrefs in the customMatrix with the suffix "lastBuild/console"
-//                         customMatrix.querySelectorAll('a').forEach((link) => {
-//                             const href = link.getAttribute('href');
-//                             const new_href = href + 'lastBuild/console';
-//                             link.setAttribute('href', new_href);
-//                         });
-//                         // insert the customMatrix after the matrix div
-//                         // delete any existing customMatrix
-//                         const existingCustomMatrix = document.querySelector('#custom-matrix');
-//                         if (existingCustomMatrix) {
-//                             existingCustomMatrix.remove();
-//                         }
-//                         node.parentNode.insertBefore(customMatrix, node.nextSibling);
-//                         node.style.display = "none";
-//                     }
-//                 });
-//             });
-//         });
-//     });
-//     observer.observe(mainpanel, { childList: true,  });
-// }
-
-// // Function to send a push notification
-// function sendNotification(title, message) {
-//     // Check if the browser supports notifications
-//     if ("Notification" in window) {
-//         // Request permission to show notifications if not already granted
-//         if (Notification.permission === "granted") {
-//             // Create and show the notification
-//             new Notification(title, { body: message });
-//         } else if (Notification.permission !== "denied") {
-//             Notification.requestPermission().then(function (permission) {
-//                 if (permission === "granted") {
-//                     // Create and show the notification
-//                     new Notification(title, { body: message });
-//                 }
-//             });
-//         }
-//     }
-// }
-
-//   // Observe changes in the DOM
-//   const observer = new MutationObserver(() => {
-//     injectButtons();
-//   });
-
-
-
-// Function to create and inject a button for requesting permission
-// function createPermissionButton() {
-//     // check if button already exists
-//     if (document.querySelector('#requestPermissionButton')) {
-//         return;
-//     }
-
-//     const button = document.createElement('button');
-//     button.textContent = 'Enable Notification Permission';
-//     button.addEventListener('click', requestNotificationPermission);
-
-//     const buildHistory = document.querySelector('#buildHistory');
-
-//     // style button so that it has nice padding and takes up 100% width 
-//     button.style.display = 'block';
-//     button.style.width = '90%';
-//     button.style.padding = '5px 10px'; // Adjust padding as needed
-//     // button.style.marginTop = '5px'; // Add margin to separate links
-//     button.style.margin = "10px 5%";
-//     button.style.backgroundColor = '#fff'; // Background color
-//     button.style.border = '1px solid #000'; // Border
-//     button.style.borderRadius = '5px'; // Rounded border
-//     button.style.cursor = "pointer";
-
-//     // insert the button after the build history table
-    
-//     if ("Notification" in window) {
-//         Notification.requestPermission().then(function (permission) {
-//             if (permission === "granted") {
-//                 //   button.textContent = 'Notification permission granted.';
-//                 //   button.style.cursor = "not-allowed";
-//                 return;
-//             }
-//         });
-//     }
-//     buildHistory.parentNode.insertBefore(button, buildHistory.previousSibling);
-//     // Append the button to the page (you can choose a suitable location)
-//     // document.body.appendChild(button);
-// }
-
-// // Function to request notification permission
-// function requestNotificationPermission() {
-//     if ("Notification" in window) {
-//         Notification.requestPermission().then(function (permission) {
-//             if (permission === "granted") {
-//                 console.log('Notification permission granted.');
-//                 // You can now use the sendNotification function to display notifications.
-//             } else {
-//                 console.log('Notification permission denied.');
-//             }
-//         });
-//     }
-// }
-
-
-
-// function getEnabledUrls() {
-//     // Retrieve all currently enabled URLs for notifications
-//     fetch('http://localhost:3039/enabled-urls')
-//         .then((response) => response.json())
-//         .then((data) => {
-//             console.log('Currently enabled URLs:', data);
-//         })
-//         .catch((error) => {
-//             console.error('Error:', error);
-//         });
-// }
-
-// // Send a POST request to enable/disable notifications for a URL
-// function enableNotificationForPage() {
-//     const enabled = true; // Set to true to enable notifications, false to disable
-//     const url = window.location.href;
-//     fetch('http://localhost:3039/notification-settings', {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//         },
-//         body: JSON.stringify({ url, enabled }),
-//       })
-//       .then((response) => {
-//           if (response.status === 200) {
-//               console.log(`Notification settings updated for ${url}`);
-//           } else {
-//               console.error('Failed to update notification settings');
-//           }
-//         })
-//         .catch((error) => {
-//           console.error('Error:', error);
-//       });
-      
-// }
-
-// function createNotificationToggleButton() {
-//     const button = document.createElement('button');
-//     button.textContent = 'Enable Notification Permission';
-//     button.addEventListener('click', enableNotificationForPage);
-    
-    
-//     // style button so that it has nice padding and takes up 100% width 
-//     button.style.display = 'block';
-//     button.style.width = '90%';
-//     button.style.padding = '5px 10px'; // Adjust padding as needed
-//     // button.style.marginTop = '5px'; // Add margin to separate links
-//     button.style.margin = "10px 5%";
-//     button.style.backgroundColor = '#fff'; // Background color
-//     button.style.border = '1px solid #000'; // Border
-//     button.style.borderRadius = '5px'; // Rounded border
-//     button.style.cursor = "pointer";
-    
-//     const buildHistory = document.querySelector('#buildHistory');
-//     buildHistory.parentNode.insertBefore(button, buildHistory.previousSibling);
-// }
-
-// // Call the function to create and inject the permission button
-// createPermissionButton();
