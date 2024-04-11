@@ -102,7 +102,10 @@ function fetchAllJenkinsJobs() {
             const elements = doc.querySelectorAll(query_string);
             all_job_names = [];
             elements.forEach((element) => {
-                all_job_names.push(element.innerText);
+                // make sure the text does not start with "#"
+                if (element.innerText.splice(0, 1) !== "#") {
+                    all_job_names.push(element.innerText);
+                }
             });
             const job_storage_dict = {
                 "jobs": all_job_names,
