@@ -22,9 +22,200 @@ function main() {
             console.log('injecting buttons!');
             injectButtons();
         } 
+        createQuickSearch();
+        // Add event listener to intercept keydown events
+        document.addEventListener('keydown', handleKeyDown);
     } else {
         // console.log('Extension is not active on this page.');
     }
+}
+
+function fuzzySearch(query, list) {
+    query = query.toLowerCase().replace(/\s/g, ''); // Remove spaces from the query
+    return list.filter(item => {
+        item = item.toLowerCase().replace(/\s/g, ''); // Remove spaces from the item
+        let j = 0; // Pointer for query
+        for (let i = 0; i < item.length; i++) {
+            if (item[i] === query[j]) {
+                j++;
+            }
+            if (j === query.length) {
+                break; // Found all characters of query in item
+            }
+        }
+        return j === query.length;
+    });
+}
+
+function fuzzyFuzzySearch(query, list) {
+    // Split query by hyphens or underscores and remove spaces
+    const queryWords = query.toLowerCase().split(/[\s-_]/).filter(word => word !== '');
+
+    return list.filter(item => {
+        // Split item by hyphens or underscores and remove spaces
+        const itemWords = item.toLowerCase().split(/[\s-_]/).filter(word => word !== '');
+
+        // Check if each word in query matches at least one word in item
+        return queryWords.every(queryWord => {
+            // Check if any word in item matches the query word fuzzily
+            return itemWords.some(itemWord => {
+                let j = 0; // Pointer for query word
+                for (let i = 0; i < itemWord.length; i++) {
+                    if (itemWord[i] === queryWord[j]) {
+                        j++;
+                    }
+                }
+                return j === queryWord.length;
+            });
+        });
+    });
+}
+
+
+function handleKeyDown(event) {
+    // Check if Ctrl+K is pressed
+    if (event.ctrlKey && event.key === 'k') {
+        event.preventDefault(); // Prevent the default behavior
+        // use our custom quick search
+        const quickSearchDiv = document.querySelector('#quick-search');
+        const tint = document.querySelector('#tint');
+        if (quickSearchDiv.style.display === "flex") {
+            quickSearchDiv.style.display = "none";
+            tint.style.display = "none";
+            quickSearchDiv.querySelector('#quick-search-input').value = "";
+            return;
+        }
+        quickSearchDiv.style.display = "flex";
+        tint.style.display = "block";
+        const quickSearchInput = document.querySelector('#quick-search-input');
+        // quickSearchInput.style.display = "flex";
+        quickSearchInput.focus();
+        console.log("ctrl+k pressed");
+    }
+}
+
+
+function createQuickSearch() {
+    // there is another element on the page that consumes the ctrl+k shortcut
+    // so we need to add a new input element to the page that will consume the ctrl+k shortcut
+    // and prevent the other element from consuming it
+    const quickSearchDiv = document.createElement('div');
+    quickSearchDiv.id = "quick-search";
+    // start with the input hidden
+    quickSearchDiv.style.display = "none";
+    quickSearchDiv.style.position = "fixed";
+    quickSearchDiv.style.width = "50%";
+    // quickSearchDiv.style.margin = "0 auto";
+    // quickSearchDiv.style.height = "50px";
+    // quickSearchDiv.style.backgroundColor = "#fff";
+    // quickSearchDiv.style.borderBottom = "1px solid #ccc";
+    quickSearchDiv.style.zIndex = "1000";
+    quickSearchDiv.style.alignItems = "center";
+    quickSearchDiv.style.padding = "20px 50px";
+    // center in middle of screen
+    quickSearchDiv.style.left = "50%";
+    quickSearchDiv.style.top = "45%";
+    quickSearchDiv.style.transform = "translateX(-50%)";
+    // quickSearchDiv.style.boxShadow = "0px 2px 2px 0px rgba(0,0,0,0.2)";
+    // quickSearchDiv.style.borderRadius = "15px";
+    quickSearchDiv.style.textAlign = "center";
+    // quickSearchDiv.style.display = "flex";
+    quickSearchDiv.style.flexDirection = "column"; // Set flex direction to column
+
+    // add slight tint to the entire screen to make the quick search more visible
+    const tint = document.createElement('div');
+    tint.id = "tint";
+    tint.style.position = "fixed";
+    tint.style.width = "100%";
+    tint.style.height = "100%";
+    tint.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+    tint.style.zIndex = "999";
+    tint.style.top = "0";
+    tint.style.left = "0";
+    document.body.appendChild(tint);
+
+    // start tint hidden
+    tint.style.display = "none";
+
+    const header = document.createElement('h2');
+    header.textContent = "Quick Search For Job";
+    header.style.margin = "0";
+    header.style.fontSize = "20px";
+    header.style.fontWeight = "normal";
+    header.style.color = "#eee";
+    quickSearchDiv.appendChild(header);
+    const quickSearchInput = document.createElement('input');
+    quickSearchInput.id = "quick-search-input";
+    quickSearchInput.style.width = "100%";
+    quickSearchInput.style.height = "30px";
+    quickSearchInput.style.border = "1px solid #ccc";
+    quickSearchInput.style.borderRadius = "5px";
+    quickSearchInput.style.padding = "5px";
+    quickSearchInput.style.fontSize = "16px";
+    quickSearchInput.style.margin = "20px 0";
+    quickSearchInput.type = "text";
+    // prevent default ctrl+k behavior
+    quickSearchDiv.appendChild(quickSearchInput);
+    
+    const resultsDiv = document.createElement('div');
+    resultsDiv.id = "quick-search-results";
+    resultsDiv.style.width = "100%";
+    resultsDiv.style.height = "auto";
+    resultsDiv.textAlign = "left";
+    quickSearchDiv.appendChild(resultsDiv);
+
+    // quickSearchInput.addEventListener('keydown', (event) => {
+    //     if (event.ctrlKey && event.key === '') {
+    //         event.preventDefault();
+    //         quickSearchInput.style.display = "flex";
+    //         quickSearchInput.focus();
+    //         console.log("ctrl+k pressed");
+    //     }
+    // });
+
+    // delete the search form if it exists
+    const searchForm = document.querySelector('#searchform');
+    if (searchForm) {
+       searchForm.style.display = "none";
+    }
+    
+    document.body.appendChild(quickSearchDiv);
+
+    quickSearchInput.addEventListener('input', (event) => {
+        const query = event.target.value;
+        const matches = fuzzySearch(query, all_job_names);
+        console.log(matches);
+        // for each match create a new simple <a> element and append to the resultsDiv
+        resultsDiv.innerHTML = "";
+        matches.forEach((match) => {
+            const matchElement = document.createElement('a');
+            matchElement.textContent = match;
+            matchElement.href = getJobUrlFromName(match);
+            matchElement.style.display = "block";
+            matchElement.style.padding = "4px";
+            matchElement.style.color = "#eee";
+            matchElement.style.textShadow = "0px 2px 2px rgba(0,0,0,0.1)";
+            matchElement.style.cursor = "pointer";
+            // remove all normal "a" styles
+            matchElement.style.textDecoration = "none";
+            // make underlined when hovered
+            matchElement.addEventListener('mouseover', () => {
+                matchElement.style.textDecoration = "underline";
+            });
+            matchElement.addEventListener('mouseout', () => {
+                matchElement.style.textDecoration = "none";
+            });
+            resultsDiv.appendChild(matchElement);
+        });
+    });
+
+    // // hide search input when user clicks outside of it
+    // document.addEventListener('click', (event) => {
+    //     if (event.target !== quickSearchInput) {
+    //         quickSearchInput.style.display = "none";
+    //     }
+    // });
+
 }
 
 function getAllJobsFromLocalStorage() {
@@ -226,6 +417,12 @@ function getJobNameFromUrl(url) {
     }
     const job_name = url.split("/job/")[1].split("/")[0];
     return job_name;
+}
+
+function getJobUrlFromName(job_name) {
+    const base_url = getBaseUrl();
+    const job_url = base_url + "/job/" + job_name + "/";
+    return job_url;
 }
 
 function doAlternateReleaseStuff() {
