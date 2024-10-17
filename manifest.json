@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
     "name": "CPC Jenkins Tweaks",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Adding various quality of life UI/UX tweaks to Jenkins for the CPC Team. Injects various buttons, links, and shortcuts to make navigating Jenkins easier.",
     "browser_specific_settings": {
         "gecko": {

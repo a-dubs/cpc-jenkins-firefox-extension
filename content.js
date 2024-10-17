@@ -102,8 +102,10 @@ function fetchAllJenkinsJobs() {
             const elements = doc.querySelectorAll(query_string);
             all_job_names = [];
             elements.forEach((element) => {
+                console.log(element);
+                console.log(element.innerText);
                 // make sure the text does not start with "#"
-                if (element.innerText.splice(0, 1) !== "#") {
+                if (element.innerText && !element.innerText.startsWith("#")) {
                     all_job_names.push(element.innerText);
                 }
             });
@@ -426,6 +428,7 @@ function createReleaseFilters() {
     projectStatusTabBar.parentNode.insertBefore(releaseFiltersDiv, projectStatusTabBar.nextSibling)
 }
 
+var ENABLE_MATRIX_TABLE_SHORTCUTS = false;
 
 function injectButtons() {
     const mainPanel = document.querySelector('#main-panel');
@@ -436,9 +439,9 @@ function injectButtons() {
     ////////////////// DO MATRIX JOB SHORTCUTS //////////////////
     if (matrixDiv) {
         matrixTable = matrixDiv.querySelector('table#configuration-matrix')
-        if (matrixTable) {
+        if (matrixTable && ENABLE_MATRIX_TABLE_SHORTCUTS) {
             const buildHistory = document.querySelector('#buildHistory');
-
+            
             const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell')
             if (mostRecentJobEntry) {
                 const mostRecentJobNoStr = mostRecentJobEntry.querySelector("a.model-link").innerText;
@@ -499,7 +502,7 @@ function injectButtons() {
             }
         }
         // when there is a matrix but no matrix table, create our own buttons
-        else {
+        else if (!matrixTable) {
             // Find all <a> elements with class "model-link" in the matrix div
             const modelLinks = matrixDiv.querySelectorAll('a.model-link');
 
