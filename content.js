@@ -250,7 +250,7 @@ function jobExists(job_name) {
 }
 
 function getValidAlternativeReleaseUrls(original_url, original_release) {
-    const possible_releases = ["16.04", "18.04", "20.04", "22.04", "23.10", "24.04"]
+    const possible_releases = ["16.04", "18.04", "20.04", "22.04", "24.04", "24.10", "25.04"]
     var valid_urls = [];
     const job_name = getJobNameFromUrl(original_url);
     possible_releases.forEach((release) => {
