@@ -2,7 +2,6 @@
 var lastJobNo = undefined;
 var all_job_names = [];
 
-
 // this should only be run once upon document load
 function main() {
     // Check if the current site's base URL is localhost:8080
@@ -14,14 +13,20 @@ function main() {
         cleanupExisting();
         modifyBanner();
         getAllJobsFromLocalStorage();
-        createReleaseFilters();
-        doAlternateReleaseStuff();
-        // Find the #main-panel div
-        const mainPanel = document.querySelector('#main-panel');
-        if (mainPanel) {
-            console.log('injecting buttons!');
-            injectButtons();
-        } 
+        if (onJobPage()) {
+            doAlternateReleaseStuff();
+            // Find the #main-panel div
+            const mainPanel = document.querySelector('#main-panel');
+            if (mainPanel) {
+                console.log('injecting buttons!');
+                injectButtons();
+            } 
+        }
+        else {
+            loadStoredFilters();
+            addAllJobFilters();
+            filterJobsByCurrentFilters();
+        }
     } else {
         // console.log('Extension is not active on this page.');
     }
@@ -31,6 +36,7 @@ function getAllJobsFromLocalStorage() {
     // first check if localStorage has the list of all jenkins jobs
     // if not, fetch the list of all jenkins jobs and store in localStorage
     var all_jobs_cache;
+
     if (window.location.href.includes('localhost:8080')) {
         all_jobs_cache = localStorage.getItem('localhost_all_jenkins_jobs');
     }
@@ -41,13 +47,14 @@ function getAllJobsFromLocalStorage() {
         console.log("Not on a jenkins page. Not fetching all jenkins jobs.");
         return;
     }
+
     if (!all_jobs_cache) {
         console.log("No cached list of all jenkins jobs found. Fetching now.")
         fetchAllJenkinsJobs();
     }
     else {
         console.log("Cached list of all jenkins jobs found.")
-        all_jobs_json = JSON.parse(all_jobs_cache);
+        const all_jobs_json = JSON.parse(all_jobs_cache);
         // check if the cache is older than 1 day
         const cache_date = new Date(all_jobs_json.date_fetched);
         const now = new Date();
@@ -59,16 +66,17 @@ function getAllJobsFromLocalStorage() {
         }
         else {
             console.log("Cached list of all jenkins jobs is less than 24 hours old.")
-            all_job_names = all_jobs_json.jobs;
-            if (!all_job_names.includes(getJobNameFromUrl(window.location.href))) {
-                console.log("Current job not found in cached list of all jenkins jobs. Fetching now.")
-                fetchAllJenkinsJobs();
+            if (onJobPage()) {
+                const all_job_names = all_jobs_json.jobs;
+                if (!all_job_names.includes(getJobNameFromUrl(window.location.href))) {
+                    console.log("Current job not found in cached list of all jenkins jobs. Fetching now.")
+                    fetchAllJenkinsJobs();
+                }
             }
             console.log("All jenkins jobs found:", all_job_names);
         }
     }
 }
-
 
 function getBaseUrl() {
     /*
@@ -86,7 +94,6 @@ function getBaseUrl() {
     }
 }
 
-
 function fetchAllJenkinsJobs() {
     // fetch https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/
     // parse as a document and then query all "#main-panel ol li a" elements
@@ -102,8 +109,8 @@ function fetchAllJenkinsJobs() {
             const elements = doc.querySelectorAll(query_string);
             all_job_names = [];
             elements.forEach((element) => {
-                console.log(element);
-                console.log(element.innerText);
+                // console.log(element);
+                // console.log(element.innerText);
                 // make sure the text does not start with "#"
                 if (element.innerText && !element.innerText.startsWith("#")) {
                     all_job_names.push(element.innerText);
@@ -128,11 +135,10 @@ function fetchAllJenkinsJobs() {
         .catch(error => console.error('Error:', error));
 }
 
-
 function cleanupExisting() {
-    const filterDiv = document.querySelector('#release-filters')
-    if (filterDiv) {
-        filterDiv.remove()
+    const filterDivs = document.querySelectorAll('.filter-row')
+    for (const div of filterDivs) {
+        div.remove()
     }
     const buttonDiv = document.querySelector('#alternate-release-buttons')
     if (buttonDiv) {
@@ -314,7 +320,7 @@ function getReleases() {
     if (!tb) {
         return
     }
-    console.log(tb)
+    // console.log(tb)
     const rows = tb.querySelectorAll('tr')
     // get .innerText from all ".jenkins-table__link model-link inside" elements and split on "-"
     // and keep the first part to ge the release name.
@@ -339,93 +345,8 @@ function getReleases() {
     return releases
 }
 
-var filteredReleases = []
-
-
-function filterByRelease(event) {
-    const release = event.target.textContent
-    if (filteredReleases.includes(release)) {
-        // remove release from filteredReleases
-        const index = filteredReleases.indexOf(release)
-        filteredReleases.splice(index, 1)
-        
-        // change button color to indicate that it is not active
-        event.target.style.border = "#000"
-        event.target.style.color = "#000"
-        
-    }
-    else {  // if release is not already selected
-        filteredReleases.push(release)
-        // change button color to indicate that it is active
-        event.target.style.border = "2px solid #081"
-        event.target.style.color = "#081"
-        // make font bold to indicate that it is active
-        event.target.style.fontWeight = "bold"
-        
-    }
-    console.log(`filteredReleases: ${filteredReleases}`)
-    const tb = document.querySelector('table#projectstatus')
-    const rows = tb.querySelectorAll('tr')
-    rows.forEach((row) => {
-        // if filteredReleases is empty, show all rows
-        if (filteredReleases.length === 0) {
-            row.style.display = ""
-            return
-        }
-        // otherwise, hide all rows containing releases that are not in filteredReleases
-        const release_text = row.querySelector('.jenkins-table__link.model-link.inside')
-        if (!release_text) {
-            return
-        }
-        console.log(release_text.innerText)
-        const release_no = release_text.innerText.split("-")[0]
-        // check if release is in filteredReleases
-        if (!filteredReleases.includes(release_no)) {
-            row.style.display = "none"
-        }
-        else {
-            row.style.display = ""
-        }
-    })
-}
-
-
-function createReleaseFilters() {
-    const releases = getReleases();
-
-    if (!releases) {
-        return
-    }
-
-    // create new div after "#projectstatus-tabBar"
-    const projectStatusTabBar = document.querySelector('#projectstatus-tabBar')
-    const releaseFiltersDiv = document.createElement('div')
-    releaseFiltersDiv.id = "release-filters"
-    // create a button for each release
-    releases.forEach((release) => {
-        const button = document.createElement('button')
-        button.classList.add('release-filter')
-
-        button.textContent = release
-        button.addEventListener('click', filterByRelease)
-        // STYLE THE BUTTONS //
-        // add pointer cursor to button
-        button.style.cursor = "pointer"
-        
-        // append each button to the releaseFiltersDiv
-        button.style.borderRadius = "5px"
-        // button.style.border = "2px solid #e9e9ed"
-        button.style.padding = "10px 16px"
-        button.style.margin = "5px"
-        button.style.marginBottom = "15px"
-        button.style.marginTop = "-5px"
-        // add soft shadow to button
-        button.style.boxShadow = "0px 2px 2px 0px rgba(0,0,0,0.2)"
-        
-        releaseFiltersDiv.appendChild(button)
-    })
-    // append the releaseFiltersDiv to the page
-    projectStatusTabBar.parentNode.insertBefore(releaseFiltersDiv, projectStatusTabBar.nextSibling)
+function onJobPage() {
+    return window.location.href.includes("/job/")
 }
 
 var ENABLE_MATRIX_TABLE_SHORTCUTS = false;
@@ -647,7 +568,324 @@ function injectButtons() {
     }   
 }
 
-// Initial injection of buttons
+// create typing for status enum 
+const JobStatus = {
+    INACTIVE: 'inactive',
+    DISABLED: 'disabled',
+    GREEN: 'green',
+    YELLOW: 'yellow',
+    RED: 'red',
+};
+
+var filteredReleases = []
+
+/**
+ * @type {JobStatus[]}
+ */
+var filteredJobStatuses = []
+
+
+function identifyJobStatus(row) {
+    if (row.classList.contains('job-status-nobuilt')) {
+        return JobStatus.INACTIVE
+    } else if (row.classList.contains('job-status-disabled')) {
+        return JobStatus.DISABLED
+    } else if (row.classList.contains('job-status-blue')) {
+        return JobStatus.GREEN
+    } else if (row.classList.contains('job-status-yellow')) {
+        return JobStatus.YELLOW
+    } else if (row.classList.contains('job-status-red')) {
+        return JobStatus.RED
+    }
+}
+
+function identifyRelease(row) {
+    const release_text = row.querySelector('.jenkins-table__link.model-link.inside')
+    if (!release_text) {
+        return
+    }
+    // console.log(release_text.innerText)
+    const release_no = release_text.innerText.split("-")[0]
+    return release_no
+}
+
+function filterJobsByCurrentFilters() {
+    const rowsToHide = []
+    const rowsToShow = []
+    const rows = document.querySelectorAll('table#projectstatus tr')
+    console.log(`There are ${rows.length} rows.`)
+    console.log('filteredReleases:', filteredReleases)
+    console.log('filteredJobStatuses:', filteredJobStatuses)
+    rows.forEach((row) => {
+        // hide any jobs that aren't currently selected in filteredReleases
+        if (!filteredReleases.includes(identifyRelease(row))) {
+            rowsToHide.push(row)
+        }
+        // hide any jobs that aren't currently selected in filteredJobStatuses
+        else if (!filteredJobStatuses.includes(identifyJobStatus(row))) {
+            rowsToHide.push(row)
+        }
+        else {
+            rowsToShow.push(row)
+            console.log("showing row:", row)
+        }
+    });
+    console.log('rowsToShow:', rowsToShow)
+    console.log('rowsToHide:', rowsToHide)
+    rowsToShow.forEach((row) => {
+        row.style.display = ""
+    })
+    rowsToHide.forEach((row) => {
+        row.style.display = "none"
+    })
+}
+
+// function filterByRelease(event) {
+//     const release = event.target.textContent
+//     if (filteredReleases.includes(release)) {
+//         // remove release from filteredReleases
+//         const index = filteredReleases.indexOf(release)
+//         filteredReleases.splice(index, 1)
+        
+//         // change button color to indicate that it is not active
+//         event.target.style.border = "#000"
+//         event.target.style.color = "#000"
+//         // make font normal to indicate that it is not active
+//         event.target.style.fontWeight = "normal"
+        
+//     }
+//     else {  // if release is not already selected
+//         filteredReleases.push(release)
+//         // change button color to indicate that it is active
+//         event.target.style.border = "2px solid #081"
+//         event.target.style.color = "#081"
+//         // make font bold to indicate that it is active
+//         event.target.style.fontWeight = "bold"
+        
+//     }
+//     console.log(`filteredReleases: ${filteredReleases}`)
+//     const tb = document.querySelector('table#projectstatus')
+//     const rows = tb.querySelectorAll('tr')
+//     rows.forEach((row) => {
+//         // if filteredReleases is empty, show all rows
+//         if (filteredReleases.length === 0) {
+//             row.style.display = ""
+//             return
+//         }
+        
+//         // check if release is in filteredReleases
+//         if (!filteredReleases.includes(release_no)) {
+//             row.style.display = "none"
+//         }
+//         else {
+//             row.style.display = ""
+//         }
+//     })
+// }
+
+const FilterType = {
+    RELEASE: 'release',
+    JOB_STATUS: 'job_status'
+}
+
+function handleFilterButtonClick(event) {
+    const filterButton = event.target
+    const filterType = filterButton.dataset.filterType
+    const filterValue = filterButton.textContent.replace(/\s/g, '_')
+    toggleFilter(filterButton, filterType, filterValue)
+}
+
+/**
+ * 
+ * @param {HTMLElement} filterButton
+ * @param {FilterType} filterType 
+ * @param {string} filterValue
+ */
+function toggleFilter(filterButton, filterType, filterValue) {
+    console.log('filterButton:', filterButton, 'filterType:', filterType, 'filterValue:', filterValue)
+    // if filterValue is in filteredJobStatuses, remove it
+    if (filterType === "job_status") {
+        // toggled OFF
+        if (filteredJobStatuses.includes(filterValue)) {
+            const index = filteredJobStatuses.indexOf(filterValue)
+            filteredJobStatuses.splice(index, 1)
+            filterButton.classList.remove('active')
+        }
+        // toggled ON
+        else { 
+            filteredJobStatuses.push(filterValue)
+            filterButton.classList.add('active')
+        }
+    }
+    // if filterValue is in filteredReleases, remove it
+    if (filterType === "release") {
+        // toggled OFF
+        if (filteredReleases.includes(filterValue)) {
+            const index = filteredReleases.indexOf(filterValue)
+            filteredReleases.splice(index, 1)
+            filterButton.classList.remove('active')
+        }
+        // toggled ON
+        else {
+            filteredReleases.push(filterValue)
+            filterButton.classList.add('active')
+        }
+    }
+    filterJobsByCurrentFilters()
+}
+
+function createLockIcon(filterDiv, storageKey) {
+    const lockIcon = document.createElement('span');
+    lockIcon.textContent = '🔒';
+    lockIcon.style.cursor = 'pointer';
+    lockIcon.style.marginLeft = '10px';
+    lockIcon.classList.add('lock-icon');
+
+    // Check if filters are already stored in local storage
+    const storedFilters = localStorage.getItem(storageKey);
+    if (storedFilters) {
+        lockIcon.classList.add('active');
+    }
+
+    lockIcon.addEventListener('click', () => {
+        if (lockIcon.classList.contains('active')) {
+            localStorage.removeItem(storageKey);
+            lockIcon.classList.remove('active');
+        } else {
+            const filters = filterDiv.querySelectorAll('.filter-button.active');
+            const filterValues = Array.from(filters).map(button => button.textContent);
+            localStorage.setItem(storageKey, JSON.stringify(filterValues));
+            lockIcon.classList.add('active');
+        }
+    });
+
+    filterDiv.appendChild(lockIcon);
+}
+
+function createReleaseFilters() {
+    const releases = getReleases();
+
+
+    if (!localStorage.getItem('releaseFilters')) {
+        releases.forEach((release) => {
+            filteredReleases.push(release)
+        })
+    }
+
+
+    if (!releases) {
+        console.log('No releases found.')
+        return
+    }
+
+    const projectStatusTabBar = document.querySelector('#projectstatus-tabBar')
+    if (!projectStatusTabBar) {
+        console.log('No project status tab bar found. Not creating release filters.')
+        return
+    }
+
+    // create new div after "#projectstatus-tabBar"
+    const releaseFiltersDiv = document.createElement('div')
+    releaseFiltersDiv.id = "release-filters"
+    releaseFiltersDiv.classList.add('filter-row')
+    // create a button for each release
+    releases.forEach((release) => {
+        const button = document.createElement('button')
+        button.classList.add('filter-button')
+
+        // if release is in filteredReleases, add active class
+        if (filteredReleases.includes(release)) {
+            button.classList.add('active')
+        }
+
+        // add filter type as a data attribute
+        button.dataset.filterType = FilterType.RELEASE
+
+        button.textContent = release
+        button.addEventListener('click', handleFilterButtonClick)
+        
+        releaseFiltersDiv.appendChild(button)
+    })
+    // append the releaseFiltersDiv to the page
+    projectStatusTabBar.parentNode.insertBefore(releaseFiltersDiv, projectStatusTabBar.nextSibling);
+    createLockIcon(releaseFiltersDiv, 'releaseFilters');
+}
+
+function createJobStatusFilters() {
+    const projectStatusTabBar = document.querySelector('#projectstatus-tabBar')
+    
+    if (!projectStatusTabBar) {
+        console.log('No project status tab bar found. Not creating job status filters.')
+        return
+    }
+
+    if (!localStorage.getItem('jobStatusFilters')) {
+        const allJobStatuses = Object.values(JobStatus)
+        allJobStatuses.forEach((status) => {
+            filteredJobStatuses.push(status)
+        });
+    }
+
+    console.log('filteredJobStatuses:', filteredJobStatuses)
+    
+    // create new div after "#projectstatus-tabBar"
+    const jobStatusFiltersDiv = document.createElement('div')
+    jobStatusFiltersDiv.id = "job-status-filters"
+    jobStatusFiltersDiv.classList.add('filter-row')
+    // create a button for each job status
+    const jobStatuses = Object.values(JobStatus)
+    jobStatuses.forEach((status) => {
+        const button = document.createElement('button')
+        button.classList.add('filter-button')
+
+        // if status is in filteredJobStatuses, add active class
+        if (filteredJobStatuses.includes(status)) {
+            button.classList.add('active')
+        }
+
+        // add filter type as a data attribute
+        button.dataset.filterType = FilterType.JOB_STATUS
+
+        button.textContent = status
+        button.addEventListener('click', handleFilterButtonClick)
+        
+        jobStatusFiltersDiv.appendChild(button)
+    })
+    // append the releaseFiltersDiv to the page
+    projectStatusTabBar.parentNode.insertBefore(jobStatusFiltersDiv, projectStatusTabBar.nextSibling);
+    createLockIcon(jobStatusFiltersDiv, 'jobStatusFilters');
+}
+
+function addAllJobFilters() {
+    // call functions for creating the rows of filters in reverse order that they should appear 
+    createJobStatusFilters()
+    createReleaseFilters()
+}
+
+function loadStoredFilters() {
+    const releaseFilters = JSON.parse(localStorage.getItem('releaseFilters') || '[]');
+    const jobStatusFilters = JSON.parse(localStorage.getItem('jobStatusFilters') || '[]');
+
+    if (releaseFilters) {
+        console.log('releaseFilters:', releaseFilters);
+    }
+    if (jobStatusFilters) {
+        console.log('jobStatusFilters:', jobStatusFilters);
+    }
+    // releaseFilters.forEach(release => {
+    //     if (!filteredReleases.includes(release)) {
+    //         filteredReleases.push(release);
+    //     }
+    // });
+
+    // jobStatusFilters.forEach(status => {
+    //     if (!filteredJobStatuses.includes(status)) {
+    //         filteredJobStatuses.push(status);
+    //     }
+    // });
+    filteredJobStatuses = jobStatusFilters;
+    filteredReleases = releaseFilters;
+}
 
 main()
 
