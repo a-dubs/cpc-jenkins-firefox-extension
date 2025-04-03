@@ -148,6 +148,7 @@ function cleanupExisting() {
     if (customBranding) {
         customBranding.remove()
     }
+
 }
 
 function modifyBanner() {
@@ -609,21 +610,43 @@ function identifyRelease(row) {
     return release_no
 }
 
+function showAllJobs() {
+    const rows = document.querySelectorAll('table#projectstatus tr')
+    rows.forEach(row => {
+        row.style.display = ""
+    })
+    
+    // Update the filter message
+    const filterMessageHiddenCount = document.querySelector('#filter-message-hidden-count')
+    if (filterMessageHiddenCount) {
+        filterMessageHiddenCount.textContent = "All filters disabled - showing all jobs"
+    }
+}
+
 function filterJobsByCurrentFilters() {
+    // Check if filters are disabled
+    if (document.querySelector('#disable-filters-checkbox')?.checked) {
+        showAllJobs()
+        return
+    }
+    
     const rowsToHide = []
     const rowsToShow = []
-    const rows = document.querySelectorAll('table#projectstatus tr')
+    const rows = document.querySelectorAll('table#projectstatus tbody tr')
     console.log(`There are ${rows.length} rows.`)
     console.log('filteredReleases:', filteredReleases)
     console.log('filteredJobStatuses:', filteredJobStatuses)
+    let numHiddenJobs = 0
     rows.forEach((row) => {
         // hide any jobs that aren't currently selected in filteredReleases
         if (!filteredReleases.includes(identifyRelease(row))) {
             rowsToHide.push(row)
+            numHiddenJobs++
         }
         // hide any jobs that aren't currently selected in filteredJobStatuses
         else if (!filteredJobStatuses.includes(identifyJobStatus(row))) {
             rowsToHide.push(row)
+            numHiddenJobs++
         }
         else {
             rowsToShow.push(row)
@@ -638,50 +661,20 @@ function filterJobsByCurrentFilters() {
     rowsToHide.forEach((row) => {
         row.style.display = "none"
     })
-}
 
-// function filterByRelease(event) {
-//     const release = event.target.textContent
-//     if (filteredReleases.includes(release)) {
-//         // remove release from filteredReleases
-//         const index = filteredReleases.indexOf(release)
-//         filteredReleases.splice(index, 1)
-        
-//         // change button color to indicate that it is not active
-//         event.target.style.border = "#000"
-//         event.target.style.color = "#000"
-//         // make font normal to indicate that it is not active
-//         event.target.style.fontWeight = "normal"
-        
-//     }
-//     else {  // if release is not already selected
-//         filteredReleases.push(release)
-//         // change button color to indicate that it is active
-//         event.target.style.border = "2px solid #081"
-//         event.target.style.color = "#081"
-//         // make font bold to indicate that it is active
-//         event.target.style.fontWeight = "bold"
-        
-//     }
-//     console.log(`filteredReleases: ${filteredReleases}`)
-//     const tb = document.querySelector('table#projectstatus')
-//     const rows = tb.querySelectorAll('tr')
-//     rows.forEach((row) => {
-//         // if filteredReleases is empty, show all rows
-//         if (filteredReleases.length === 0) {
-//             row.style.display = ""
-//             return
-//         }
-        
-//         // check if release is in filteredReleases
-//         if (!filteredReleases.includes(release_no)) {
-//             row.style.display = "none"
-//         }
-//         else {
-//             row.style.display = ""
-//         }
-//     })
-// }
+    // update the filter message area "filter-message-hidden-count"
+    const filterMessageHiddenCount = document.querySelector('#filter-message-hidden-count')
+    if (!filterMessageHiddenCount) {
+        console.log('No filter message area found. Not updating filter message area.')
+        return
+    }
+    if (numHiddenJobs > 0) {
+        filterMessageHiddenCount.textContent = `${numHiddenJobs} jobs hidden by current filters`
+    }
+    else {
+        filterMessageHiddenCount.textContent = "No jobs hidden by current filters"
+    }
+}
 
 const FilterType = {
     RELEASE: 'release',
@@ -856,10 +849,90 @@ function createJobStatusFilters() {
     createLockIcon(jobStatusFiltersDiv, 'jobStatusFilters');
 }
 
+function createFilterMessageArea() {
+    const projectStatusTabBar = document.querySelector('#projectstatus-tabBar')
+    if (!projectStatusTabBar) {
+        console.log('No project status tab bar found. Not creating filter message area.')
+        return
+    }
+    const filterMessageArea = document.createElement('div')
+    filterMessageArea.id = "filter-message-area"
+    filterMessageArea.style.position = "relative"
+    filterMessageArea.style.width = "100%"
+    filterMessageArea.classList.add('filter-row')
+
+    // add p element saying how many jobs are being hidden by current filters that can be easily updated later
+    const filterMessage = document.createElement('p')
+    filterMessage.id = "filter-message-hidden-count"
+    
+    filterMessageArea.appendChild(filterMessage)
+
+    // insert the filterMessageArea into the page after the projectStatusTabBar
+    projectStatusTabBar.parentNode.insertBefore(filterMessageArea, projectStatusTabBar.nextSibling);
+}
+
+function createDisableFiltersRow() {
+    const projectStatusTabBar = document.querySelector('#projectstatus-tabBar')
+    if (!projectStatusTabBar) {
+        console.log('No project status tab bar found. Not creating disable filters row.')
+        return
+    }
+    
+    const disableFiltersDiv = document.createElement('div')
+    disableFiltersDiv.id = "disable-filters-row"
+    disableFiltersDiv.classList.add('filter-row')
+    disableFiltersDiv.style.display = "flex"
+    disableFiltersDiv.style.alignItems = "center"
+    disableFiltersDiv.style.marginBottom = "15px"
+    disableFiltersDiv.style.marginTop = "-10px"
+    
+    const radioInput = document.createElement('input')
+    radioInput.type = "checkbox"
+    radioInput.id = "disable-filters-checkbox"
+    radioInput.style.marginRight = "10px"
+    
+    // Check if stored in localStorage
+    if (localStorage.getItem('disableAllFilters') === 'true') {
+        radioInput.checked = true
+    }
+    
+    radioInput.addEventListener('change', function() {
+        if (this.checked) {
+            // Save to localStorage
+            localStorage.setItem('disableAllFilters', 'true')
+            // Show all jobs
+            showAllJobs()
+        } else {
+            // Remove from localStorage
+            localStorage.setItem('disableAllFilters', 'false')
+            // Apply current filters
+            filterJobsByCurrentFilters()
+        }
+    })
+    
+    const label = document.createElement('label')
+    label.htmlFor = "disable-filters-checkbox"
+    label.textContent = "Disable all filters (show all jobs)"
+    label.style.fontWeight = "bold"
+    
+    disableFiltersDiv.appendChild(radioInput)
+    disableFiltersDiv.appendChild(label)
+    
+    // Insert after filter message area
+    const filterMessageArea = document.querySelector('#filter-message-area')
+    if (filterMessageArea) {
+        filterMessageArea.parentNode.insertBefore(disableFiltersDiv, filterMessageArea.nextSibling)
+    } else {
+        projectStatusTabBar.parentNode.insertBefore(disableFiltersDiv, projectStatusTabBar.nextSibling)
+    }
+}
+
 function addAllJobFilters() {
     // call functions for creating the rows of filters in reverse order that they should appear 
     createJobStatusFilters()
     createReleaseFilters()
+    createFilterMessageArea()
+    createDisableFiltersRow()
 }
 
 function loadStoredFilters() {
@@ -872,19 +945,19 @@ function loadStoredFilters() {
     if (jobStatusFilters) {
         console.log('jobStatusFilters:', jobStatusFilters);
     }
-    // releaseFilters.forEach(release => {
-    //     if (!filteredReleases.includes(release)) {
-    //         filteredReleases.push(release);
-    //     }
-    // });
-
-    // jobStatusFilters.forEach(status => {
-    //     if (!filteredJobStatuses.includes(status)) {
-    //         filteredJobStatuses.push(status);
-    //     }
-    // });
     filteredJobStatuses = jobStatusFilters;
     filteredReleases = releaseFilters;
+    
+    // Check if filters should be disabled on page load
+    if (localStorage.getItem('disableAllFilters') === 'true') {
+        setTimeout(() => {
+            const checkbox = document.querySelector('#disable-filters-checkbox');
+            if (checkbox) {
+                checkbox.checked = true;
+                showAllJobs();
+            }
+        }, 100);
+    }
 }
 
 main()
