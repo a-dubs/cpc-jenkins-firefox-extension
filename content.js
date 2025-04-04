@@ -1,6 +1,6 @@
 // content.js
 var lastJobNo = undefined;
-var all_job_names = [];
+var ALL_JOB_NAMES = [];
 
 // this should only be run once upon document load
 function main() {
@@ -38,7 +38,8 @@ function getAllJobsFromLocalStorage() {
     var all_jobs_cache;
 
     if (window.location.href.includes('localhost:8080')) {
-        all_jobs_cache = localStorage.getItem('localhost_all_jenkins_jobs');
+        // disable the localhost cache for now (we can spam this api all we want)
+        // all_jobs_cache = localStorage.getItem('localhost_all_jenkins_jobs');
     }
     else if (window.location.href.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
         all_jobs_cache = localStorage.getItem('scij_all_jenkins_jobs');
@@ -55,6 +56,7 @@ function getAllJobsFromLocalStorage() {
     else {
         console.log("Cached list of all jenkins jobs found.")
         const all_jobs_json = JSON.parse(all_jobs_cache);
+        // console.log("all_jobs_json:", all_jobs_json);
         // check if the cache is older than 1 day
         const cache_date = new Date(all_jobs_json.date_fetched);
         const now = new Date();
@@ -62,18 +64,18 @@ function getAllJobsFromLocalStorage() {
         const diff_in_hours = diff / (1000 * 60 * 60);
         if (diff_in_hours > 24) {
             console.log("Cached list of all jenkins jobs is older than 24 hours. Fetching now.")
-            fetchAllJenkinsJobs();
+            fetchAllJenkinsJobsFromApi();
         }
         else {
             console.log("Cached list of all jenkins jobs is less than 24 hours old.")
             if (onJobPage()) {
-                const all_job_names = all_jobs_json.jobs;
-                if (!all_job_names.includes(getJobNameFromUrl(window.location.href))) {
+                ALL_JOB_NAMES = all_jobs_json.jobs;
+                if (!ALL_JOB_NAMES.includes(getJobNameFromUrl(window.location.href))) {
                     console.log("Current job not found in cached list of all jenkins jobs. Fetching now.")
                     fetchAllJenkinsJobs();
                 }
             }
-            console.log("All jenkins jobs found:", all_job_names);
+            // console.log("All jenkins jobs found:", ALL_JOB_NAMES);
         }
     }
 }
@@ -94,6 +96,31 @@ function getBaseUrl() {
     }
 }
 
+function fetchAllJenkinsJobsFromApi() {
+    const url = getBaseUrl() + "/view/all/api/json?tree=jobs[displayName]";
+    // console.log("Fetching all jenkins jobs from:", url);
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            ALL_JOB_NAMES = data.jobs.map(job => job.displayName);
+            console.log("job names api response:", ALL_JOB_NAMES);
+            const job_storage_dict = {
+                "jobs": ALL_JOB_NAMES,
+                "date_fetched": new Date().toISOString(),
+            }
+            // then store these values in firefox local storage so that we can use them later
+            if (window.location.href.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
+                localStorage.setItem('scij_all_jenkins_jobs', JSON.stringify(job_storage_dict));
+                // console.log("Stored all jenkins jobs in localStorage @ scij_all_jenkins_jobs.")
+            }
+            if (window.location.href.includes('localhost:8080')) {
+                localStorage.setItem('localhost_all_jenkins_jobs', JSON.stringify(job_storage_dict));
+                // console.log("Stored all jenkins jobs in localStorage @ localhost_all_jenkins_jobs.")
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
 function fetchAllJenkinsJobs() {
     // fetch https://stable-cloud-images-ps5.jenkins.canonical.com/view/all/
     // parse as a document and then query all "#main-panel ol li a" elements
@@ -107,20 +134,20 @@ function fetchAllJenkinsJobs() {
             const parser = new DOMParser();
             const doc = parser.parseFromString(text, 'text/html');
             const elements = doc.querySelectorAll(query_string);
-            all_job_names = [];
+            ALL_JOB_NAMES = [];
             elements.forEach((element) => {
                 // console.log(element);
                 // console.log(element.innerText);
                 // make sure the text does not start with "#"
                 if (element.innerText && !element.innerText.startsWith("#")) {
-                    all_job_names.push(element.innerText);
+                    ALL_JOB_NAMES.push(element.innerText);
                 }
             });
             const job_storage_dict = {
-                "jobs": all_job_names,
+                "jobs": ALL_JOB_NAMES,
                 "date_fetched": new Date().toISOString(),
             }
-            console.log(all_job_names);
+            console.log(ALL_JOB_NAMES);
             // then store these values in firefox local storage so that we can use them later
             if (window.location.href.includes('stable-cloud-images-ps5.jenkins.canonical.com')) {
                 localStorage.setItem('scij_all_jenkins_jobs', JSON.stringify(job_storage_dict));
@@ -130,7 +157,6 @@ function fetchAllJenkinsJobs() {
                 localStorage.setItem('localhost_all_jenkins_jobs', JSON.stringify(job_storage_dict));
                 console.log("Stored all jenkins jobs in localStorage @ localhost_all_jenkins_jobs.")
             }
-            doAlternateReleaseStuff();
         })
         .catch(error => console.error('Error:', error));
 }
@@ -238,7 +264,10 @@ function getJobNameFromUrl(url) {
 }
 
 function doAlternateReleaseStuff() {
-    if (all_job_names.length > 0) {
+    if (document.querySelector("#alternate-release-buttons")) {
+        return;
+    }
+    if (ALL_JOB_NAMES.length > 0) {
         console.log("doing alternate release stuff now.")
         // use regex to check if document title starts with release number like "22.04"
         const release = getReleaseFromUrl(window.location.href)
@@ -253,7 +282,7 @@ function doAlternateReleaseStuff() {
 
 function jobExists(job_name) {
     console.log("checking if job exists:", job_name)
-    return all_job_names.includes(job_name)
+    return ALL_JOB_NAMES.includes(job_name)
 }
 
 function getValidAlternativeReleaseUrls(original_url, original_release) {
