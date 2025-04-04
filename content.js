@@ -20,6 +20,7 @@ function main() {
             if (mainPanel) {
                 console.log('injecting buttons!');
                 injectButtons();
+                setupMatrixObserver();
             } 
         }
         else {
@@ -260,31 +261,7 @@ function getJobNameFromUrl(url) {
         return
     }
     const job_name = url.split("/job/")[1].split("/")[0];
-    return job_name;
-}
-
-function doAlternateReleaseStuff() {
-    if (document.querySelector("#alternate-release-buttons")) {
-        return;
-    }
-    if (ALL_JOB_NAMES.length > 0) {
-        console.log("doing alternate release stuff now.")
-        // use regex to check if document title starts with release number like "22.04"
-        const release = getReleaseFromUrl(window.location.href)
-        if (release) {
-            console.log("job page found. doing alternate release stuff now.")
-            const valid_urls = getValidAlternativeReleaseUrls(window.location.href, release)
-            console.log("valid_urls:", valid_urls)
-            addAlternateReleaseShortcuts(valid_urls)
-        }
-    }
-}
-
-function jobExists(job_name) {
-    console.log("checking if job exists:", job_name)
-    return ALL_JOB_NAMES.includes(job_name)
-}
-
+    return job_na
 function getValidAlternativeReleaseUrls(original_url, original_release) {
     const possible_releases = ["16.04", "18.04", "20.04", "22.04", "24.04", "24.10", "25.04"]
     var valid_urls = [];
@@ -379,7 +356,108 @@ function onJobPage() {
     return window.location.href.includes("/job/")
 }
 
-var ENABLE_MATRIX_TABLE_SHORTCUTS = false;
+var ENABLE_MATRIX_TABLE_SHORTCUTS = true;
+
+///////// JUST REPLACING MATRIX TABLE IN PLACE - WILL REFRESH EVERY 5 SECONDS //////////
+// function replaceMatrixTableWithLinkedIcons() {
+//     // copies the matrix table, adds links to each cell, then replaces the matrix table with the new table
+//     const matrixTable = document.querySelector('table#configuration-matrix');
+//     if (!matrixTable) {
+//         console.log('No matrix table found.');
+//         return;
+//     }
+//     // check if we have already updated the links (if ends with "/console" then yes) 
+//     if (matrixTable.querySelector('a[href$="/console"]')) {
+//         // console.log('Matrix table already updated.');
+//         return;
+//     }
+
+//     const newTable = matrixTable.cloneNode(true);
+//     addLinksToMatrixTable(newTable);
+//     replaceDisabledCellsWithSvg(newTable);
+
+//     // replace the matrix table with the new table
+//     matrixTable.parentNode.replaceChild(newTable, matrixTable);
+//     // add a class to the new table
+//     newTable.classList.add('linked-matrix-table');
+//     console.log('Matrix table replaced with linked icons.');
+// }
+
+///////// HARD DELETE MATRIX SO IT ISNT REFRESHED EVERY 5 SECONDS //////////
+function replaceMatrixTableWithLinkedIcons() {
+    const matrixDiv = document.querySelector('#matrix');
+    const mainPanel = document.querySelector('#main-panel');
+    // copies the matrix table, adds links to each cell, then replaces the matrix table with the new table
+    const matrixTable = document.querySelector('table#configuration-matrix');
+    if (!matrixTable) {
+        console.log('No matrix table found.');
+        return;
+    }
+    // check if we have already updated the links (if ends with "/console" then yes) 
+    if (matrixTable.querySelector('a[href$="/console"]')) {
+        // console.log('Matrix table already updated.');
+        return;
+    }
+
+    const newTable = matrixTable.cloneNode(true);
+    addLinksToMatrixTable(newTable);
+    replaceDisabledCellsWithSvg(newTable);
+
+    // add a class to the new table
+    newTable.classList.add('linked-matrix-table');
+    // replace the matrix table with the new table
+    mainPanel.replaceChild(newTable, matrixDiv);
+    console.log('Matrix table replaced with linked icons.');
+    // delete the matrix div
+    if (matrixDiv) {
+        matrixDiv.remove();
+        return;
+    }
+}
+
+function addLinksToMatrixTable(table) {
+    const links = table.querySelectorAll('a');
+    const buildHistory = document.querySelector('#buildHistory');
+    const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell');
+    if (!mostRecentJobEntry) {
+        console.log('No most recent job entry found.');
+        return;
+    }
+    const mostRecentJobNoStr = mostRecentJobEntry.querySelector("a.model-link").innerText;
+    const mostRecentJobNo = parseInt(mostRecentJobNoStr.slice(1), 10);
+    links.forEach((link) => {
+        const href = link.getAttribute('href');
+        const target_url = `${href}${mostRecentJobNo}/console`;
+        link.setAttribute('href', target_url);
+    });
+}
+
+function replaceDisabledCellsWithSvg(table) {
+    table.querySelectorAll('td').forEach((cell) => {
+        const spanElem = cell.querySelector('span');
+        if (spanElem && spanElem.innerText.includes("Not configured")) {
+            console.log('Replacing cell with SVG');
+            const newDiv = document.createElement('div');
+            newDiv.style.width = "24px";
+            newDiv.style.height = "24px";
+            newDiv.innerHTML = `
+                <svg tooltip="Disabled" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="0 0 512 512" title="Disabled">
+                    <ellipse cx="256" cy="256" fill="none" rx="210" ry="210" stroke="var(--text-color-secondary)" stroke-linecap="round"
+                        stroke-miterlimit="10" stroke-width="36"></ellipse>
+                    <ellipse cx="256" cy="256" fill="none" rx="100" ry="100" stroke="var(--text-color-secondary)" stroke-linecap="round"
+                        stroke-miterlimit="10" stroke-width="36"></ellipse>
+                    <path d="M192 320l128-128" fill="none" stroke="var(--text-color-secondary)" stroke-linecap="round"
+                        stroke-linejoin="round" stroke-width="36"></path>
+                </svg>
+            `;
+            cell.innerHTML = ''; // Clear the cell content
+            cell.appendChild(newDiv); // Append the new div with SVG
+        }
+        else {
+            console.log('Cell is not disabled:', spanElem?.innerHTML);
+        }
+    });
+}
 
 function injectButtons() {
     const mainPanel = document.querySelector('#main-panel');
@@ -391,66 +469,7 @@ function injectButtons() {
     if (matrixDiv) {
         matrixTable = matrixDiv.querySelector('table#configuration-matrix')
         if (matrixTable && ENABLE_MATRIX_TABLE_SHORTCUTS) {
-            const buildHistory = document.querySelector('#buildHistory');
-            
-            const mostRecentJobEntry = buildHistory.querySelector('td.build-row-cell')
-            if (mostRecentJobEntry) {
-                const mostRecentJobNoStr = mostRecentJobEntry.querySelector("a.model-link").innerText;
-                const mostRecentJobNo = parseInt(mostRecentJobNoStr.slice(1), 10);
-                if (lastJobNo === undefined || lastJobNo !== mostRecentJobNo) {
-                    console.log('lastJobNo: ' + lastJobNo);
-                    lastJobNo = mostRecentJobNo;
-                    // create a new table that matches the matrix table and inject in a div after the matrix div
-                    // and make it position absolute and left: *width of matrix div* + 20px
-                    // and top: *top of matrix div*
-                    shortcutTable = matrixTable.cloneNode(true)
-                    noColumnsToKeep = shortcutTable.querySelectorAll('tr')[0].querySelectorAll('td').length - 1
-                    console.log("noColumnsToKeep: " + noColumnsToKeep)
-                    // iterate through the rows and only keep the last two columns
-                    shortcutTable.querySelectorAll('tr').forEach((row) => {
-                        const rowLen = row.querySelectorAll('td').length
-                        row.querySelectorAll('td').forEach((cell, index) => {
-                            if (index < rowLen - noColumnsToKeep) {
-                                cell.remove()
-                            }
-                        })
-                    });
-                    // add a class to the table
-                    shortcutTable.id = "shortcut-table"
-                    // modify the <a> elements to point to the console
-                    shortcutTable.querySelectorAll('a').forEach((link) => {
-                        const href = link.getAttribute('href');
-                        const target_url = window.location.href + mostRecentJobNo + '/' +
-                            href + 'console';
-                        link.setAttribute('href', target_url)
-                    });
-                    // set each row to have the same height as the matrix table
-                    shortcutTable.querySelectorAll('tr').forEach((row) => {
-                        row.style.height = matrixTable.querySelectorAll('tr')[0].offsetHeight + "px"
-                    });
-                    // set the css styles
-                    shortcutTable.style.position = "absolute"
-                    // get calculated width of matrix table
-                    shortcutTable.style.left = matrixDiv.offsetLeft + matrixTable.offsetWidth + 10 + "px"
-                    shortcutTable.style.top = matrixDiv.offsetTop + "px"
-                    shortcutTable.style.backgroundColor = "#fff"
-                    shortcutTable.style.color = "#ccc"
-                    shortcutTable.style.border = "1px solid #f10"
-                    // Apply border-collapse: collapse to the inner tbody
-                    // shortcutTable.querySelector('tbody').style.borderCollapse = "collapse"
-                    shortcutTable.style.borderCollapse = "collapse"
-                    // remove old table if it exists
-                    const existingTable = document.querySelector('#shortcut-table');
-                    if (existingTable) {
-                        existingTable.remove();
-                    }
-
-                    // inject the table
-                    matrixDiv.parentNode.insertBefore(shortcutTable, matrixDiv.nextSibling);
-                } else {
-                    console.log('No new jobs have been run yet. Skipping injecting shortcut table.');
-                }
-            }
+            replaceMatrixTableWithLinkedIcons();
         }
         // when there is a matrix but no matrix table, create our own buttons
         else if (!matrixTable) {
@@ -571,12 +590,12 @@ function injectButtons() {
     }
     ////////////////// DO PERMALINK SHORTCUTS //////////////////
     if (document.querySelector('.permalink-link')) {
-        console.log("permalinks found!")
+        // console.log("permalinks found!")
         // iterate through the permalinks and add a small icon next to each one linking to the console output
         const permalinks = document.querySelectorAll('.permalink-link')
         // first check if the console output link already exists
         if (document.querySelector('.console-output-link')) {
-            console.log("console output link already exists!")
+            // console.log("console output link already exists!")
             return;
         }
 
@@ -594,7 +613,7 @@ function injectButtons() {
         })
     }
     else {
-        console.log('permalinks not found in main panel.');
+        // console.log('permalinks not found in main panel.');
     }   
 }
 
@@ -987,6 +1006,59 @@ function loadStoredFilters() {
             }
         }, 100);
     }
+}
+
+function setupMatrixObserver() {
+    const mainPanel = document.querySelector('#main-panel');
+    if (!mainPanel) {
+        console.log('Main panel not found. Cannot observe matrix changes.');
+        return;
+    }
+    
+    const matrixDiv = mainPanel.querySelector('#matrix');
+    if (!matrixDiv) {
+        console.log('Matrix div not found. Cannot observe matrix changes.');
+        return;
+    }
+    const matrixDivParent = matrixDiv.parentNode;
+    
+    console.log('Setting up matrix observer');
+    
+    // Create a mutation observer to watch for changes in the matrix div
+    const observer = new MutationObserver((mutations) => {
+        let needsUpdate = false;
+        
+        // Check if any mutation is relevant
+        for (const mutation of mutations) {
+            // Look for changes in child nodes or attributes that might indicate content updates
+            if (mutation.type === 'childList' || 
+                (mutation.type === 'attributes' && 
+                 (mutation.attributeName === 'class' || mutation.attributeName === 'style'))) {
+                needsUpdate = true;
+                break;
+            }
+        }
+        
+        if (needsUpdate) {
+            console.log('Matrix content changed, updating buttons');
+            // Reset last job number to force button recreation
+            lastJobNo = undefined;
+            // Small delay to ensure DOM is fully updated
+            setTimeout(() => {
+                replaceMatrixTableWithLinkedIcons();
+            }, 100);
+        }
+    });
+    
+    // Start observing the matrix div parent with all its children
+    observer.observe(matrixDivParent, { 
+        childList: true,      // Watch for changes in direct children
+        subtree: false,        // Watch for changes in all descendants
+        attributes: false,     // Watch for attribute changes
+        characterData: false   // Watch for text changes
+    });
+    
+    console.log('Matrix observer setup complete');
 }
 
 main()
